@@ -2,9 +2,6 @@ esphome:
   name: ${name}
   name_add_mac_suffix: false
   friendly_name: ${friendly_name}
-#  platformio_options:
-#    board_build.f_cpu: 120000000L
-#    board_build.f_cpu: 240000000L
 
 substitutions:
   name: bt-vevor_ble
@@ -27,10 +24,8 @@ api:
 
 ota:
   platform: esphome
-  password: "09ec3c09b5847b5a4eeef2c15ce8fb00"
 
 # Web Server
-# if you use home assistant and have frequent disconnections. disable the web_server
 web_server:
   port: 80
   version: 1
@@ -49,19 +44,23 @@ interval:
     id: intervallo
     then:
       - ble_client.ble_write:
-          service_uuid: 0000ffe0-0000-1000-8000-00805f9b34fb
-          characteristic_uuid: 0000ffe1-0000-1000-8000-00805f9b34fb
+          # ACHTUNG: Hier die neue Service-UUID
+          service_uuid: 0000fff0-0000-1000-8000-00805f9b34fb 
+          # ACHTUNG: Hier die neue Write-Characteristic-UUID ODER Handle 0x0005
+          characteristic_uuid: 0000fff1-0000-1000-8000-00805f9b34fb
+          # Alternative: handle: 0x0005
+          handle: 0x0005
           value: [0xaa, 0x55, 0x0c, 0x22, 0x01, 0x00, 0x00, 0x2f]
 
 ble_client:
-  - mac_address: 21:47:08:1a:b1:1e # change to your mac address
+  - mac_address: EC:B1:C3:00:3C:56 # change to your mac address
     id: heater_ble
 
 # Global variables
 globals:
   - id: current_mode
     type: int
-    initial_value: '1'  # 1 for LEVEL, 2 for AUTOMATIC
+    initial_value: '1' # 1 for LEVEL, 2 for AUTOMATIC
 
 text_sensor:
   - platform: template
@@ -133,10 +132,18 @@ sensor:
     type: characteristic
     id: my_ble_sensor
     ble_client_id: heater_ble
-    service_uuid: "0000ffe0-0000-1000-8000-00805f9b34fb"
-    characteristic_uuid: "0000ffe1-0000-1000-8000-00805f9b34fb"
+    # NEU: Service UUID
+    service_uuid: "0000fff0-0000-1000-8000-00805f9b34fb"
+    # NEU: Notify Characteristic UUID ODER Handle 0x0003 (für eingehende Daten)
+    characteristic_uuid: "0000fff2-0000-1000-8000-00805f9b34fb"
+    # Alternative: handle: 0x0003
+    handle: 0x0003
     name: "BLE Raw Data"
     notify: true
+    # Zusätzliche Handles zur Aktivierung der Benachrichtigung
+    # Das CCCD (Client Characteristic Configuration Descriptor) Handle ist 0x0004
+    # und muss gesetzt werden, damit Notify funktioniert.
+    notification_handle: 0x0004
     lambda: |-
       
       static const char* const states[] = {"Warmup", "Self test running", "Ignition", "Heating", "Shutting down"};
@@ -149,7 +156,7 @@ sensor:
         id(Mode_Burner).publish_state(x[8] == 2 ? "Automatic" : "Level");
         id(stato_Bruciatore).publish_state(x[3] > 0);
         
-        // Set States
+        # Set States
         if (x[5] < sizeof(states)/sizeof(states[0])) {
           id(stato_Candeletta).publish_state(states[x[5]]);
         } else {
@@ -179,15 +186,21 @@ switch:
     optimistic: true
     turn_on_action:
       - ble_client.ble_write:
-          service_uuid: '0000FFE0-0000-1000-8000-00805F9B34FB'
-          characteristic_uuid: '0000FFE1-0000-1000-8000-00805F9B34FB'
+          # NEU: Service UUID
+          service_uuid: '0000fff0-0000-1000-8000-00805f9b34fb'
+          # NEU: Write Characteristic UUID ODER Handle 0x0005
+          characteristic_uuid: '0000fff1-0000-1000-8000-00805f9b34fb'
+          handle: 0x0005
           value: [0xAA, 0x55, 0x0C, 0x22, 0x03, 0x01, 0x00, 0x32] #ON
 
     turn_off_action:
       - ble_client.ble_write:
-          service_uuid: '0000FFE0-0000-1000-8000-00805F9B34FB'
-          characteristic_uuid: '0000FFE1-0000-1000-8000-00805F9B34FB'
-          value: [0xAA, 0x55, 0x0C, 0x22, 0x03, 0x00, 0x00, 0x31] #OFF                          
+          # NEU: Service UUID
+          service_uuid: '0000fff0-0000-1000-8000-00805f9b34fb'
+          # NEU: Write Characteristic UUID ODER Handle 0x0005
+          characteristic_uuid: '0000fff1-0000-1000-8000-00805f9b34fb'
+          handle: 0x0005
+          value: [0xAA, 0x55, 0x0C, 0x22, 0x03, 0x00, 0x00, 0x31] #OFF
       - lambda: |-
           id(fan_speed).publish_state(0);
     
@@ -212,14 +225,20 @@ select:
             then:
               - lambda: 'id(current_mode) = 1;'
               - ble_client.ble_write:
-                  service_uuid: '0000FFE0-0000-1000-8000-00805F9B34FB'
-                  characteristic_uuid: '0000FFE1-0000-1000-8000-00805F9B34FB'
+                  # NEU: Service UUID
+                  service_uuid: '0000fff0-0000-1000-8000-00805f9b34fb'
+                  # NEU: Write Characteristic UUID ODER Handle 0x0005
+                  characteristic_uuid: '0000fff1-0000-1000-8000-00805f9b34fb'
+                  handle: 0x0005
                   value: [0xAA, 0x55, 0x0C, 0x22, 0x02, 0x01, 0x00, 0x31]
             else:
               - lambda: 'id(current_mode) = 2;'
               - ble_client.ble_write:
-                  service_uuid: '0000FFE0-0000-1000-8000-00805F9B34FB'
-                  characteristic_uuid: '0000FFE1-0000-1000-8000-00805F9B34FB'
+                  # NEU: Service UUID
+                  service_uuid: '0000fff0-0000-1000-8000-00805f9b34fb'
+                  # NEU: Write Characteristic UUID ODER Handle 0x0005
+                  characteristic_uuid: '0000fff1-0000-1000-8000-00805f9b34fb'
+                  handle: 0x0005
                   value: [0xAA, 0x55, 0x0C, 0x22, 0x02, 0x02, 0x00, 0x32]
 
 number:
@@ -236,14 +255,20 @@ number:
       then:
         # Set Automatic mode
         - ble_client.ble_write:
-             service_uuid: '0000FFE0-0000-1000-8000-00805F9B34FB'
-             characteristic_uuid: '0000FFE1-0000-1000-8000-00805F9B34FB'
-             value: [0xAA, 0x55, 0x0C, 0x22, 0x02, 0x02, 0x00, 0x32]
+              # NEU: Service UUID
+              service_uuid: '0000fff0-0000-1000-8000-00805f9b34fb'
+              # NEU: Write Characteristic UUID ODER Handle 0x0005
+              characteristic_uuid: '0000fff1-0000-1000-8000-00805f9b34fb'
+              handle: 0x0005
+              value: [0xAA, 0x55, 0x0C, 0x22, 0x02, 0x02, 0x00, 0x32]
         - delay: 1s
-        # Send Temp       
+        # Send Temp        
         - ble_client.ble_write:
-            service_uuid: '0000FFE0-0000-1000-8000-00805F9B34FB'
-            characteristic_uuid: '0000FFE1-0000-1000-8000-00805F9B34FB'
+            # NEU: Service UUID
+            service_uuid: '0000fff0-0000-1000-8000-00805f9b34fb'
+            # NEU: Write Characteristic UUID ODER Handle 0x0005
+            characteristic_uuid: '0000fff1-0000-1000-8000-00805f9b34fb'
+            handle: 0x0005
             value: !lambda |-
               uint8_t temp = (uint8_t)id(heater_temperature).state;  // Set Temp
               uint8_t checksum = (0xAA + 0x55 + 0x0C + 0x22 + 0x04 + temp + 0x00) +1 % 256 ; // Calc checksum
@@ -262,16 +287,21 @@ number:
       then:
         # Set Level mode
         - ble_client.ble_write:
-            service_uuid: '0000FFE0-0000-1000-8000-00805F9B34FB'
-            characteristic_uuid: '0000FFE1-0000-1000-8000-00805F9B34FB'
+            # NEU: Service UUID
+            service_uuid: '0000fff0-0000-1000-8000-00805f9b34fb'
+            # NEU: Write Characteristic UUID ODER Handle 0x0005
+            characteristic_uuid: '0000fff1-0000-1000-8000-00805f9b34fb'
+            handle: 0x0005
             value: [0xAA, 0x55, 0x0C, 0x22, 0x02, 0x01, 0x00, 0x31]
         - delay: 1s
         # Send Level
         - ble_client.ble_write:
-            service_uuid: '0000FFE0-0000-1000-8000-00805F9B34FB'
-            characteristic_uuid: '0000FFE1-0000-1000-8000-00805F9B34FB'
+            # NEU: Service UUID
+            service_uuid: '0000fff0-0000-1000-8000-00805f9b34fb'
+            # NEU: Write Characteristic UUID ODER Handle 0x0005
+            characteristic_uuid: '0000fff1-0000-1000-8000-00805f9b34fb'
+            handle: 0x0005
             value: !lambda |-
               uint8_t level = (uint8_t)id(heater_level).state;  // Set Level
               uint8_t checksum = (0xAA + 0x55 + 0x0C + 0x22 + 0x04 + level + 0x00) +1 % 256 ; // Calc checksum
               return {0xAA, 0x55, 0x0C, 0x22, 0x04, level, 0x00, checksum};
-
