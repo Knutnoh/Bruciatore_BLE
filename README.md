@@ -1,52 +1,123 @@
-# Bruciatore_BLE Controller
+ESPHome – Vevor Diesel Standheizung (BLE)
 
-This project provides a Python script for interacting with the VEVOR diesel air heater, All-in-One model, via Bluetooth Low Energy (BLE). The code has been developed through Bluetooth data sniffing between the heater and the manufacturer's "AirHeaterBLE" app.
+Dieses Projekt integriert eine Vevor Diesel-Standheizung mit Bluetooth (BLE) in ESPHome
+.
+Damit lässt sich die Heizung über Home Assistant oder die ESPHome-Weboberfläche komfortabel steuern und überwachen.
 
-## Description
+Unterschiede zu anderen Projekten
 
-The VEVOR diesel air heater is designed for use in cars, campers, trucks, and RVs. This script allows you to control the heater using a BLE-compatible device, such as a Raspberry Pi or a computer with a Bluetooth adapter.
+Im Gegensatz zum Projekt Bruciatore_BLE
+, das mit einer einzigen Service-UUID arbeitet, nutzt diese Implementierung drei UUIDs:
 
-## Features
+fff0 – Service UUID
 
-- Bluetooth Low Energy connection with the VEVOR Diesel Air Heater device.
-- Sending specific commands to control various heater functionalities.
-- Monitoring and displaying information received from the heater, such as temperature, ignition status, power, and more.
+fff1 – Characteristic (Empfang, Notify)
 
-## Requirements
+fff2 – Characteristic (Senden, Write)
 
-- Python 3.x
-- Arch Linux: sudo pacman -S base-devel cmake libevdev libconfig systemd-libs glib2
-- Debian/Ubuntu: sudo apt install build-essential cmake pkg-config libevdev-dev libudev-dev libconfig++-dev libglib2.0-dev
-- Bluepy Library: `pip install bluepy`
+👉 Diese Werte sind im Code definiert und können bei Bedarf angepasst werden. Dadurch ist die Lösung flexibler und auch für verschiedene Modellvarianten der Vevor-Heizung nutzbar.
 
-## Usage
+Features
 
-1. Ensure your Bluetooth device is enabled.
-2. Run the Python script.
-3. Follow the instructions to input manual commands or let the script automatically send the `cmd1` command at regular intervals.
+🔥 Heizung Ein/Aus schalten
 
-## Supported Commands
+🌡️ Zieltemperatur einstellen (Automatik-Modus)
 
-Available Commands:
-- `P0`: Turn heater OFF.
-- `P1`: Turn heater ON.
-- `T8-T36`: Set temperature (8-36°C).
-- `L1-L10`: Set power level (1-10).
-- `exit`: Exit program.
-  
-## Product Information
+💨 Gebläsestufen regeln (Manuell-Modus)
 
-For more details about the VEVOR Diesel Air Heater, visit the [VEVOR product page](https://www.vevor.it/riscaldatore-aria-diesel-c_10321/vevor-riscaldatore-d-aria-diesel-all-in-one-per-auto-camper-camion-rv-12v-5kw-temperatura-regolabile-8-36-controllo-bluetooth-riscaldatore-da-parcheggio-per-auto-consumo-di-carburante-0-16-0-52l-h-p_010971160616).
+🔄 Modus-Wechsel: Automatik ↔ Manuell
 
-## Important Note
+🌬️ Lüftermodus separat aktivieren
 
-This project is created for educational purposes and automation of the VEVOR diesel air heater. Use the software at your own risk. The author is not responsible for any damage resulting from the improper use of the code.
-For a more comprehensive understanding of the utilized protocol, refer to the detailed explanation available at [this link](https://github.com/iotmaestro/vevor-heater-ble).
+🏔️ Höhenmodus (High Altitude Mode)
 
-## Using ESP32 Board with Home Assistant
-This is (ESP32-VevorBLE.yaml) the file to insert into an [esp32](https://upload.wikimedia.org/wikipedia/commons/3/33/Espressif_ESP-WROOM-32_Wi-Fi_%26_Bluetooth_Module.jpg) bluethoot card. to be able to use it with home assistant and on wifi
+📊 Sensoren für:
 
-## Thanks
+Betriebsmodus (Manuell/Automatik)
 
-Thanks to:
-- [jsnyder](https://github.com/jsnyder)
+Heizungsstatus (inkl. Phasen: Aufwärmen, Zündung, Heizen etc.)
+
+Raumtemperatur
+
+Schalentemperatur
+
+Batteriespannung
+
+Aktuellen Zielwert
+
+Voraussetzungen
+
+ESP32-Board (z. B. esp32dev)
+
+Installiertes ESPHome
+
+Zugang zu deinem Home Assistant (optional)
+
+Vevor Diesel-Standheizung mit Bluetooth (BLE)
+
+Installation
+
+Repository klonen oder die YAML-Datei in dein ESPHome-Projekt übernehmen.
+
+Passe die Substitutions in der YAML an:
+
+substitutions:
+  name: bt-vevor-ble
+  friendly_name: Diesel_Standheizung
+  heater_mac: "XX:XX:XX:XX:XX:XX"   # MAC-Adresse deiner Heizung eintragen
+  service_uuid: "0000fff0-0000-1000-8000-00805f9b34fb"
+  char_fff1_uuid: "0000fff1-0000-1000-8000-00805f9b34fb"
+  char_fff2_uuid: "0000fff2-0000-1000-8000-00805f9b34fb"
+
+
+👉 Hier können die UUIDs an dein Heizungsmodell angepasst werden.
+
+WLAN-Zugangsdaten in secrets.yaml eintragen:
+
+wifi_ssid: "DEIN-WLAN"
+wifi_password: "DEIN-PASSWORT"
+
+
+Firmware mit ESPHome flashen und Gerät starten.
+
+In Home Assistant taucht die Heizung automatisch als Gerät mit allen Entitäten auf.
+
+Steuerung
+
+Schalter
+
+Heizung Ein/Aus
+
+Lüfter
+
+Höhenmodus
+
+Buttons
+
+Modus Wechseln
+
+Temperatur/Gebläse +
+
+Temperatur/Gebläse -
+
+Slider
+
+Zieltemperatur (Automatik-Modus: 8–36 °C)
+
+Gebläsestufe (Manuell-Modus: 1–6)
+
+Sensoren
+
+Raumtemperatur, Batteriespannung, Schalentemperatur
+
+Betriebsmodus (Manuell/Automatik)
+
+Heizungsstatus (inkl. Detailphasen)
+
+Hinweise
+
+Die BLE-Kommunikation basiert auf den Befehlen der originalen Vevor-App.
+
+UUIDs (fff0, fff1, fff2) sind im Code flexibel anpassbar.
+
+Logging (logger.level: DEBUG) ist standardmäßig aktiv, um die BLE-Kommunikation beim Testen sichtbar zu machen.
