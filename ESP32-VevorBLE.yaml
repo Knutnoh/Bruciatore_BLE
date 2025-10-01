@@ -4,28 +4,28 @@ esphome:
   friendly_name: ${friendly_name}
 
 substitutions:
-  name: bt-vevor_ble
-  friendly_name: Diesel_Air_Heater
+  name: bt-vevor-ble
+  friendly_name: Diesel_Standheizung
+  service_uuid: "0000fff0-0000-1000-8000-00805f9b34fb"
+  char_fff1_uuid: "0000fff1-0000-1000-8000-00805f9b34fb"
+  char_fff2_uuid: "0000fff2-0000-1000-8000-00805f9b34fb"
+  heater_mac: "EC:B1:C3:00:3C:56"
 
 esp32_ble_tracker:
 
 esp32:
   board: esp32dev
   framework:
-    type: arduino
+    type: esp-idf
 
-# Enable logging
 logger:
+  level: DEBUG
 
-# Enable Home Assistant API
 api:
-  encryption:
-    key: "vHF/emJMoAZz3q8k4JySuSZnYEa43IujpwN9+fQkwYk="
 
 ota:
   platform: esphome
 
-# Web Server
 web_server:
   port: 80
   version: 1
@@ -33,275 +33,288 @@ web_server:
 wifi:
   ssid: !secret wifi_ssid
   password: !secret wifi_password
-
-  # Enable fallback hotspot (captive portal) in case wifi connection fails
   ap:
     ssid: "VevorBLE Hotspot"
     password: "12345678"
 
+globals:
+  - id: ble_verbunden
+    type: bool
+    initial_value: 'false'
+  - id: aktueller_modus
+    type: int
+    initial_value: '1'
+  - id: command_aktiv
+    type: bool
+    initial_value: 'false'
+
 interval:
-  - interval: 15s
-    id: intervallo
+  - interval: 5s
     then:
-      - ble_client.ble_write:
-          # ACHTUNG: Hier die neue Service-UUID
-          service_uuid: 0000fff0-0000-1000-8000-00805f9b34fb 
-          # ACHTUNG: Hier die neue Write-Characteristic-UUID ODER Handle 0x0005
-          characteristic_uuid: 0000fff1-0000-1000-8000-00805f9b34fb
-          # Alternative: handle: 0x0005
-          handle: 0x0005
-          value: [0xaa, 0x55, 0x0c, 0x22, 0x01, 0x00, 0x00, 0x2f]
+      - if:
+          condition:
+            lambda: 'return id(ble_verbunden) && !id(command_aktiv);'
+          then:
+            - ble_client.ble_write:
+                id: heizung_ble
+                service_uuid: ${service_uuid}
+                characteristic_uuid: ${char_fff2_uuid}
+                value: [0xBA, 0xAB, 0x04, 0xCC, 0x00, 0x00, 0x00, 0x35]
 
 ble_client:
-  - mac_address: EC:B1:C3:00:3C:56 # change to your mac address
-    id: heater_ble
-
-# Global variables
-globals:
-  - id: current_mode
-    type: int
-    initial_value: '1' # 1 for LEVEL, 2 for AUTOMATIC
+  - mac_address: ${heater_mac}
+    id: heizung_ble
+    on_connect:
+      - lambda: 'id(ble_verbunden) = true;'
+      - logger.log: "BLE Verbunden"
+      - delay: 2s
+      - ble_client.ble_write:
+          id: heizung_ble
+          service_uuid: ${service_uuid}
+          characteristic_uuid: ${char_fff2_uuid}
+          value: [0xBA, 0xAB, 0x04, 0xCC, 0x00, 0x00, 0x00, 0x35]
+          
+    on_disconnect:
+      - lambda: 'id(ble_verbunden) = false;'
+      - logger.log: "BLE Getrennt"
 
 text_sensor:
   - platform: template
-    name: "Glow Plug Status"
-    id: stato_Candeletta
-    icon: "mdi:induction"
+    name: "Betriebsmodus"
+    id: betriebsmodus_text
+
   - platform: template
-    name: "Heater Mode"
-    id: Mode_Burner
+    name: "Heizungsstatus"
+    id: heizung_status_text
 
 binary_sensor:
   - platform: template
-    name: "Heater Status"
-    id: stato_Bruciatore
+    name: "Heizung Status"
+    id: heizung_an_sensor
 
-# Sensors for status reporting
 sensor:
-  - platform: uptime
-    name: Uptime Sensor
+  - platform: template
+    name: "Zielwert"
+    id: zielwert
+    accuracy_decimals: 0
 
   - platform: template
-    name: "Error Code"
-    id: Error_Code
-    accuracy_decimals: 0 
+    name: "Raumtemperatur"
+    id: raumtemperatur
+    unit_of_measurement: "°C"
+    accuracy_decimals: 1
 
   - platform: template
-    name: "Battery Voltage"
-    id: battery_voltage
+    name: "Batteriespannung"
+    id: batteriespannung
     unit_of_measurement: "V"
     accuracy_decimals: 1
     device_class: voltage
-    icon: "mdi:car-battery"
 
   - platform: template
-    name: "Altitude"
-    unit_of_measurement: 'm'
-    id: altitude
-    device_class: distance
-    accuracy_decimals: 0
-    icon: "mdi:summit"
-
-  - platform: template
-    name: "Power Status"
-    id: stato_Potenza
-    accuracy_decimals: 0
-    icon: "mdi:speedometer"
-
-  - platform: template
-    name: "Fan Speed"
-    id: fan_speed
-    accuracy_decimals: 0
-    icon: "mdi:fan"
-
-  - platform: template
-    name: "Room Temperature"
-    id: room_temperature
+    name: "Schalentemperatur"
+    id: schalentemperatur
     unit_of_measurement: "°C"
     accuracy_decimals: 0
-    icon: "mdi:home-thermometer"
-
-  - platform: template
-    name: "Heating Temperature"
-    id: heating_temperature
-    unit_of_measurement: "°C"
-    accuracy_decimals: 0
-    icon: "mdi:radiator"
 
   - platform: ble_client
     type: characteristic
-    id: my_ble_sensor
-    ble_client_id: heater_ble
-    # NEU: Service UUID
-    service_uuid: "0000fff0-0000-1000-8000-00805f9b34fb"
-    # NEU: Notify Characteristic UUID ODER Handle 0x0003 (für eingehende Daten)
-    characteristic_uuid: "0000fff2-0000-1000-8000-00805f9b34fb"
-    # Alternative: handle: 0x0003
-    handle: 0x0003
-    name: "BLE Raw Data"
+    id: ble_antwort
+    ble_client_id: heizung_ble
+    service_uuid: ${service_uuid}
+    characteristic_uuid: ${char_fff1_uuid}
+    name: "BLE Rohdaten"
     notify: true
-    # Zusätzliche Handles zur Aktivierung der Benachrichtigung
-    # Das CCCD (Client Characteristic Configuration Descriptor) Handle ist 0x0004
-    # und muss gesetzt werden, damit Notify funktioniert.
-    notification_handle: 0x0004
     lambda: |-
-      
-      static const char* const states[] = {"Warmup", "Self test running", "Ignition", "Heating", "Shutting down"};
-
-      if (x[0] == 170) {
-        ESP_LOGD("BLE", "Received data: %02X %02X %02X %02X %02X %02X %02X %02X %02X %02X %02X %02X %02X %02X %02X %02X %02X %02X %02X %02X ",
-                  x[0], x[1], x[2], x[3], x[4], x[5], x[6], x[7], x[8], x[9], x[10], x[11], x[12], x[13], x[14], x[15], x[16], x[17], x[18], x[19]);
-
-        id(heating_temperature).publish_state((int16_t)(((uint8_t)x[14])<<8)|((uint8_t)x[13]));
-        id(Mode_Burner).publish_state(x[8] == 2 ? "Automatic" : "Level");
-        id(stato_Bruciatore).publish_state(x[3] > 0);
+      if (x.size() >= 21 && x[0] == 0xAB && x[1] == 0xBA) {
+        uint8_t strom = x[4];
+        uint8_t modus_flag = x[5];
+        uint8_t ziel = x[6];
+        uint8_t betrieb_zustand = x[7];
+        uint8_t spannung = x[9];
+        float raumtemp = x[11] / 2.5;
+        uint8_t schalentemp = x[13];
         
-        # Set States
-        if (x[5] < sizeof(states)/sizeof(states[0])) {
-          id(stato_Candeletta).publish_state(states[x[5]]);
-        } else {
-          ESP_LOGD("Error", "Received state does not match known possible states: %02d", x[5]);
-        }
+        const char* zustand_namen[] = {"Bereit", "Aufwärmen", "Selbsttest", "Zündung", "Heizen", "Herunterfahren"};
+        const char* strom_status = (strom == 0x00) ? "AUS" : (strom == 0x01) ? "EIN" : "Kühlphase";
         
-        id(stato_Potenza).publish_state(x[9]);
-        id(Error_Code).publish_state(x[17]);
-        id(altitude).publish_state(((x[7])<<8)|x[6]);
-        id(room_temperature).publish_state((int16_t)(((uint8_t)x[16])<<8)|((uint8_t)x[15]));
-        id(battery_voltage).publish_state((((x[12])<<8)|x[11])/10.0);
-
-        if (id(stato_Candeletta).state == "Warmup" && id(stato_Bruciatore).state == 0) {
-          id(fan_speed).publish_state(0);
-        } else {
-          id(fan_speed).publish_state(x[10]+1);
+        ESP_LOGW("BLE", "Strom: %s | Modus: %s | Ziel: %d", strom_status, modus_flag ? "Automatik" : "Manuell", ziel);
+        
+        id(heizung_an_sensor).publish_state(strom == 0x01);
+        id(heizung_schalter).publish_state(strom == 0x01);
+        id(aktueller_modus) = modus_flag;
+        id(zielwert).publish_state(ziel);
+        id(raumtemperatur).publish_state(raumtemp);
+        id(batteriespannung).publish_state(spannung);
+        id(schalentemperatur).publish_state(schalentemp);
+        id(betriebsmodus_text).publish_state(modus_flag ? "Automatik" : "Manuell");
+        
+        std::string status_text = strom_status;
+        if (strom == 0x01 && betrieb_zustand < 6) {
+          status_text = status_text + " - " + zustand_namen[betrieb_zustand];
         }
+        id(heizung_status_text).publish_state(status_text);
       }
-      return 0;
-        
-# Switches
+      return x.size();
+
 switch:
   - platform: template
-    name: "Heater Power"
-    id: heater_power
-    icon: "mdi:radiator"
+    name: "Heizung Ein/Aus"
+    id: heizung_schalter
+    icon: "mdi:fire"
+    optimistic: true
+    turn_on_action:
+      - lambda: 'id(command_aktiv) = true;'
+      - ble_client.ble_write:
+          id: heizung_ble
+          service_uuid: ${service_uuid}
+          characteristic_uuid: ${char_fff2_uuid}
+          value: [0xBA, 0xAB, 0x04, 0xBB, 0xA1, 0x00, 0x00, 0xC5]
+      - delay: 1000ms
+      - ble_client.ble_write:
+          id: heizung_ble
+          service_uuid: ${service_uuid}
+          characteristic_uuid: ${char_fff2_uuid}
+          value: [0xBA, 0xAB, 0x04, 0xCC, 0x00, 0x00, 0x00, 0x35]
+      - delay: 500ms
+      - lambda: 'id(command_aktiv) = false;'
+    turn_off_action:
+      - lambda: 'id(command_aktiv) = true;'
+      - ble_client.ble_write:
+          id: heizung_ble
+          service_uuid: ${service_uuid}
+          characteristic_uuid: ${char_fff2_uuid}
+          value: [0xBA, 0xAB, 0x04, 0xBB, 0xA1, 0x00, 0x00, 0xC5]
+      - delay: 1000ms
+      - ble_client.ble_write:
+          id: heizung_ble
+          service_uuid: ${service_uuid}
+          characteristic_uuid: ${char_fff2_uuid}
+          value: [0xBA, 0xAB, 0x04, 0xCC, 0x00, 0x00, 0x00, 0x35]
+      - delay: 500ms
+      - lambda: 'id(command_aktiv) = false;'
+
+  - platform: template
+    name: "Lüfter"
+    id: luefter_modus
+    icon: "mdi:fan"
     optimistic: true
     turn_on_action:
       - ble_client.ble_write:
-          # NEU: Service UUID
-          service_uuid: '0000fff0-0000-1000-8000-00805f9b34fb'
-          # NEU: Write Characteristic UUID ODER Handle 0x0005
-          characteristic_uuid: '0000fff1-0000-1000-8000-00805f9b34fb'
-          handle: 0x0005
-          value: [0xAA, 0x55, 0x0C, 0x22, 0x03, 0x01, 0x00, 0x32] #ON
-
+          id: heizung_ble
+          service_uuid: ${service_uuid}
+          characteristic_uuid: ${char_fff2_uuid}
+          value: [0xBA, 0xAB, 0x04, 0xBB, 0xA4, 0x00, 0x00, 0xC8]
     turn_off_action:
       - ble_client.ble_write:
-          # NEU: Service UUID
-          service_uuid: '0000fff0-0000-1000-8000-00805f9b34fb'
-          # NEU: Write Characteristic UUID ODER Handle 0x0005
-          characteristic_uuid: '0000fff1-0000-1000-8000-00805f9b34fb'
-          handle: 0x0005
-          value: [0xAA, 0x55, 0x0C, 0x22, 0x03, 0x00, 0x00, 0x31] #OFF
-      - lambda: |-
-          id(fan_speed).publish_state(0);
-    
-    lambda: |-
-      return id(stato_Bruciatore).state;
+          id: heizung_ble
+          service_uuid: ${service_uuid}
+          characteristic_uuid: ${char_fff2_uuid}
+          value: [0xBA, 0xAB, 0x04, 0xBB, 0xA4, 0x00, 0x00, 0xC8]
 
-# Select for mode
-select:
   - platform: template
-    name: "Heater Mode"
-    id: heater_mode
-    options:
-      - "Level"
-      - "Automatic"
-    initial_option: "Level"
+    name: "Höhenmodus"
+    id: hoehenmodus
+    icon: "mdi:mountain"
     optimistic: true
-    on_value:
-      then:
-        - if:
-            condition:
-              lambda: 'return id(heater_mode).state == "Level";'
-            then:
-              - lambda: 'id(current_mode) = 1;'
-              - ble_client.ble_write:
-                  # NEU: Service UUID
-                  service_uuid: '0000fff0-0000-1000-8000-00805f9b34fb'
-                  # NEU: Write Characteristic UUID ODER Handle 0x0005
-                  characteristic_uuid: '0000fff1-0000-1000-8000-00805f9b34fb'
-                  handle: 0x0005
-                  value: [0xAA, 0x55, 0x0C, 0x22, 0x02, 0x01, 0x00, 0x31]
-            else:
-              - lambda: 'id(current_mode) = 2;'
-              - ble_client.ble_write:
-                  # NEU: Service UUID
-                  service_uuid: '0000fff0-0000-1000-8000-00805f9b34fb'
-                  # NEU: Write Characteristic UUID ODER Handle 0x0005
-                  characteristic_uuid: '0000fff1-0000-1000-8000-00805f9b34fb'
-                  handle: 0x0005
-                  value: [0xAA, 0x55, 0x0C, 0x22, 0x02, 0x02, 0x00, 0x32]
+    turn_on_action:
+      - ble_client.ble_write:
+          id: heizung_ble
+          service_uuid: ${service_uuid}
+          characteristic_uuid: ${char_fff2_uuid}
+          value: [0xBA, 0xAB, 0x04, 0xBB, 0xA5, 0x00, 0x00, 0xC9]
+    turn_off_action:
+      - ble_client.ble_write:
+          id: heizung_ble
+          service_uuid: ${service_uuid}
+          characteristic_uuid: ${char_fff2_uuid}
+          value: [0xBA, 0xAB, 0x04, 0xBB, 0xA5, 0x00, 0x00, 0xC9]
+
+button:
+  - platform: template
+    name: "Modus Wechseln"
+    icon: "mdi:swap-horizontal"
+    on_press:
+      - ble_client.ble_write:
+          id: heizung_ble
+          service_uuid: ${service_uuid}
+          characteristic_uuid: ${char_fff2_uuid}
+          value: [0xBA, 0xAB, 0x04, 0xBB, 0xAD, 0x00, 0x00, 0xD1]
+
+  - platform: template
+    name: "Temperatur/Gebläse +"
+    icon: "mdi:thermometer-plus"
+    on_press:
+      - if:
+          condition:
+            lambda: 'return id(aktueller_modus) == 1;'
+          then:
+            - ble_client.ble_write:
+                id: heizung_ble
+                service_uuid: ${service_uuid}
+                characteristic_uuid: ${char_fff2_uuid}
+                value: [0xBA, 0xAB, 0x04, 0xBB, 0xA2, 0x00, 0x00, 0xC6]
+
+  - platform: template
+    name: "Temperatur/Gebläse -"
+    icon: "mdi:thermometer-minus"
+    on_press:
+      - if:
+          condition:
+            lambda: 'return id(aktueller_modus) == 1;'
+          then:
+            - ble_client.ble_write:
+                id: heizung_ble
+                service_uuid: ${service_uuid}
+                characteristic_uuid: ${char_fff2_uuid}
+                value: [0xBA, 0xAB, 0x04, 0xBB, 0xA3, 0x00, 0x00, 0xC7]
 
 number:
   - platform: template
-    name: "Heater Temperature"
-    id: heater_temperature
+    name: "Zieltemperatur"
+    id: temperatur_slider
     min_value: 8
     max_value: 36
     step: 1
     unit_of_measurement: "°C"
-    icon: "mdi:thermometer"
-    optimistic: true
+    mode: slider
+    optimistic: false
+    lambda: 'return (id(aktueller_modus) == 1) ? id(zielwert).state : (float)NAN;'
     set_action:
-      then:
-        # Set Automatic mode
-        - ble_client.ble_write:
-              # NEU: Service UUID
-              service_uuid: '0000fff0-0000-1000-8000-00805f9b34fb'
-              # NEU: Write Characteristic UUID ODER Handle 0x0005
-              characteristic_uuid: '0000fff1-0000-1000-8000-00805f9b34fb'
-              handle: 0x0005
-              value: [0xAA, 0x55, 0x0C, 0x22, 0x02, 0x02, 0x00, 0x32]
-        - delay: 1s
-        # Send Temp        
-        - ble_client.ble_write:
-            # NEU: Service UUID
-            service_uuid: '0000fff0-0000-1000-8000-00805f9b34fb'
-            # NEU: Write Characteristic UUID ODER Handle 0x0005
-            characteristic_uuid: '0000fff1-0000-1000-8000-00805f9b34fb'
-            handle: 0x0005
-            value: !lambda |-
-              uint8_t temp = (uint8_t)id(heater_temperature).state;  // Set Temp
-              uint8_t checksum = (0xAA + 0x55 + 0x0C + 0x22 + 0x04 + temp + 0x00) +1 % 256 ; // Calc checksum
-              return {0xAA, 0x55, 0x0C, 0x22, 0x04, temp, 0x00, checksum};
+      - if:
+          condition:
+            lambda: 'return id(aktueller_modus) == 1 && (int)x != (int)id(zielwert).state;'
+          then:
+            - repeat:
+                count: !lambda 'return abs((int)x - (int)id(zielwert).state);'
+                then:
+                  - ble_client.ble_write:
+                      id: heizung_ble
+                      service_uuid: ${service_uuid}
+                      characteristic_uuid: ${char_fff2_uuid}
+                      value: !lambda 'return ((int)x > (int)id(zielwert).state) ? std::vector<uint8_t>{0xBA, 0xAB, 0x04, 0xBB, 0xA2, 0x00, 0x00, 0xC6} : std::vector<uint8_t>{0xBA, 0xAB, 0x04, 0xBB, 0xA3, 0x00, 0x00, 0xC7};'
+                  - delay: 300ms
 
   - platform: template
-    name: "Heater LEVEL"
-    id: heater_level
-    min_value: 0
-    max_value: 10
+    name: "Gebläsestufe"
+    id: level_slider
+    min_value: 1
+    max_value: 6
     step: 1
-    unit_of_measurement: "Level"
-    icon: "mdi:format-list-numbered"
-    optimistic: true
+    mode: slider
+    optimistic: false
+    lambda: 'return (id(aktueller_modus) == 0) ? id(zielwert).state : (float)NAN;'
     set_action:
-      then:
-        # Set Level mode
-        - ble_client.ble_write:
-            # NEU: Service UUID
-            service_uuid: '0000fff0-0000-1000-8000-00805f9b34fb'
-            # NEU: Write Characteristic UUID ODER Handle 0x0005
-            characteristic_uuid: '0000fff1-0000-1000-8000-00805f9b34fb'
-            handle: 0x0005
-            value: [0xAA, 0x55, 0x0C, 0x22, 0x02, 0x01, 0x00, 0x31]
-        - delay: 1s
-        # Send Level
-        - ble_client.ble_write:
-            # NEU: Service UUID
-            service_uuid: '0000fff0-0000-1000-8000-00805f9b34fb'
-            # NEU: Write Characteristic UUID ODER Handle 0x0005
-            characteristic_uuid: '0000fff1-0000-1000-8000-00805f9b34fb'
-            handle: 0x0005
-            value: !lambda |-
-              uint8_t level = (uint8_t)id(heater_level).state;  // Set Level
-              uint8_t checksum = (0xAA + 0x55 + 0x0C + 0x22 + 0x04 + level + 0x00) +1 % 256 ; // Calc checksum
-              return {0xAA, 0x55, 0x0C, 0x22, 0x04, level, 0x00, checksum};
+      - if:
+          condition:
+            lambda: 'return id(aktueller_modus) == 0 && (int)x != (int)id(zielwert).state;'
+          then:
+            - repeat:
+                count: !lambda 'return abs((int)x - (int)id(zielwert).state);'
+                then:
+                  - ble_client.ble_write:
+                      id: heizung_ble
+                      service_uuid: ${service_uuid}
+                      characteristic_uuid: ${char_fff2_uuid}
+                      value: !lambda 'return ((int)x > (int)id(zielwert).state) ? std::vector<uint8_t>{0xBA, 0xAB, 0x04, 0xBB, 0xA2, 0x00, 0x00, 0xC6} : std::vector<uint8_t>{0xBA, 0xAB, 0x04, 0xBB, 0xA3, 0x00, 0x00, 0xC7};'
+                  - delay: 300ms
